@@ -1,0 +1,30 @@
+settings:
+  chelsea:
+    name: Chelsea FC
+    language: en
+    staleness: 3h
+    news_search_string: chelsea fc
+    nlp_filter_score: 0.975
+    acceptable_news_sources:
+      - Goal.com
+      - Metro.co.uk
+      - Evening Standard
+      - The Independent
+      - The Guardian
+      - BBC Sport
+      - Chelsea FC
+      - We Ain't Got No History
+      - Football.London
+      - The Athletic
+    verified_news_sources:
+      - Chelsea FC
+      - We Ain't Got No History
+    twitter_api:
+      client_id: **client_id**
+      client_secret: **client_secret**
+      api_key: **api_key**
+      api_key_secret: **api_key_secret**
+      bearer_token: **bearer_token**
+      access_token: **access_token**
+      access_token_secret: **access_token_secret**
+openai_api_key: **openai_api_key**
