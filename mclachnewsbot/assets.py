@@ -9,11 +9,97 @@ import datetime as dt
 import json
 import hashlib
 from openai import OpenAI
-from mclachnewsbot.tweeting import send_tweet
+from mclachnewsbot.bluesky import send_post
 
 from unidecode import unidecode
 import codecs
 from mclachnewsbot.nlp import initialize_model, vectorize_text, similarity
+
+from selenium.webdriver.common.by import By
+from unidecode import unidecode
+import codecs
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
+from bs4 import BeautifulSoup
+import time
+import pandas as pd
+import numpy as np
+import random
+
+
+def get_proxy():
+        options = Options()
+        options.headless = True
+        options.add_argument("window-size=700,600")
+        driver=  webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()), options=options
+        )  # create driver
+        
+
+        try:
+            driver.get("https://sslproxies.org/")
+            # on some machines the xpath is "//table[@class='table table-striped table-bordered dataTable']"???
+            # table = driver.find_element_by_xpath("//table[@class='table table-striped table-bordered']")
+            table = driver.find_elements(by=By.TAG_NAME, value='table')[0]
+            df = pd.read_html(table.get_attribute("outerHTML"))[0]
+            df = df.iloc[np.where(~np.isnan(df["Port"]))[0], :]  # ignore nans
+
+            ips = df["IP Address"].values
+            ports = df["Port"].astype("int").values
+            time.sleep(2)
+            driver.quit()
+            proxies = list()
+            for i in range(len(ips)):
+                proxies.append("{}:{}".format(ips[i], ports[i]))
+            i = random.randint(0, len(proxies) - 1)
+            
+            return proxies[i]
+        except Exception as e:
+            driver.close()
+            driver.quit()
+            raise e
+        
+def start_driver():
+        options = Options()
+        # whoscored scraper CANNOT be headless
+        options.add_argument("window-size=700,600")
+        proxy = get_proxy()  # Use proxy
+        options.add_argument(
+            '--proxy-server="http={};https={}"'.format(proxy, proxy))
+        prefs = {
+            "profile.managed_default_content_settings.images": 2
+        }  # don't load images to make faster
+        options.add_experimental_option("prefs", prefs)
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()), options=options
+        )  # create driver
+        driver.timeouts.page_load=2
+        return driver
+
+def push_button(driver):
+    buttons = driver.find_elements(by=By.TAG_NAME, value="button")
+    try:
+        b = next(b for b in buttons if b.get_attribute('aria-label') == "Accept all")
+        b.click()
+        time.sleep(3)
+    except StopIteration:
+        return
+        # Do something else if there are no accept all
+
+def get_full_article_text_sel(url):
+    driver=start_driver()
+    driver.get(url)
+    time.sleep(3)
+    push_button(driver)
+    text = unidecode(codecs.decode(driver.page_source, "unicode_escape"))
+    soup = BeautifulSoup(text, "html.parser")
+        # find all paragraphs that are below a header
+    paragraphs = soup.find_all("p")
+    full_text = " ".join([p.get_text() for p in paragraphs])
+    return full_text
 
 
 class AssetConfig(Config):
@@ -198,7 +284,7 @@ def get_news_stories(context: AssetExecutionContext, config: AssetConfig):
     for r in filtered_results:
         context.log.info(f"Acceptable result: {r['title']}.  Source: {r['media']}")
         context.log.info(f"Full metadata: {r}")
-        r["full_text"] = get_full_story_text("http://" + r["link"])
+        r["full_text"] = get_full_article_text_sel("http://" + r["link"])
         r["hash"] = hashlib.md5(r["link"].encode()).hexdigest()
         r["processed"] = False
         r["datetime"] = (
